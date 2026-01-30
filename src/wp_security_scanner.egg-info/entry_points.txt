@@ -1,0 +1,2 @@
+[console_scripts]
+wordpress-scan = wp_scanner.cli:main

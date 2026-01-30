@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""
+WordPress Security Scanner Suite - CLI Entry Point
+"""
+
+import sys
+import argparse
+from pathlib import Path
+
+# Add src to path for development
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from wp_scanner import WPSecurityScanner, BatchScanner, __version__
+
+
+def print_banner():
+    """Print application banner."""
+    banner = f"""
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║                                                               ║
+    ║   WordPress Security Scanner Suite v{__version__:<24}║
+    ║   Professional Security Assessment Tool                       ║
+    ║                                                               ║
+    ╚═══════════════════════════════════════════════════════════════╝
+    """
+    print(banner)
+
+
+def print_disclaimer():
+    """Print legal disclaimer."""
+    print("""
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║  LEGAL DISCLAIMER                                             ║
+    ╠═══════════════════════════════════════════════════════════════╣
+    ║  This tool is for AUTHORIZED security testing ONLY.           ║
+    ║  You must have explicit written permission to scan targets.   ║
+    ║  Unauthorized scanning may violate computer crime laws.       ║
+    ╚═══════════════════════════════════════════════════════════════╝
+    """)
+
+
+def scan_single(args):
+    """Scan a single target."""
+    with WPSecurityScanner(
+        args.url,
+        aggressive=args.aggressive,
+        timeout=args.timeout,
+        threads=args.threads,
+        verbose=args.verbose,
+        output_dir=args.output
+    ) as scanner:
+        scanner.scan()
+        scanner.print_report()
+
+        if args.export:
+            reports = scanner.export_reports()
+            print(f"\nReports saved:")
+            for fmt, path in reports.items():
+                print(f"  {fmt}: {path}")
+
+
+def scan_batch(args):
+    """Scan multiple targets."""
+    targets = []
+
+    if args.targets_file:
+        with open(args.targets_file, 'r') as f:
+            targets.extend([
+                line.strip() for line in f
+                if line.strip() and not line.startswith('#')
+            ])
+
+    if args.urls:
+        targets.extend(args.urls)
+
+    if not targets:
+        print("Error: No targets specified")
+        sys.exit(1)
+
+    # Remove duplicates
+    targets = list(dict.fromkeys(targets))
+
+    print(f"Loaded {len(targets)} targets")
+
+    scanner = BatchScanner(
+        targets,
+        aggressive=args.aggressive,
+        threads=args.threads,
+        timeout=args.timeout,
+        output_dir=args.output
+    )
+
+    scanner.scan_all()
+    scanner.print_summary()
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description='WordPress Security Scanner Suite',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s scan https://example.com
+  %(prog)s scan https://example.com --aggressive
+  %(prog)s batch -t targets.txt
+  %(prog)s batch -u site1.com site2.com --aggressive
+
+For more information: https://github.com/wp-scanner/suite
+        """
+    )
+
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
+
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+
+    # Single scan command
+    scan_parser = subparsers.add_parser('scan', help='Scan a single target')
+    scan_parser.add_argument('url', help='Target URL to scan')
+    scan_parser.add_argument('--aggressive', '-a', action='store_true',
+                            help='Enable aggressive scanning')
+    scan_parser.add_argument('--timeout', '-t', type=int, default=15,
+                            help='Request timeout (default: 15)')
+    scan_parser.add_argument('--threads', type=int, default=10,
+                            help='Concurrent threads (default: 10)')
+    scan_parser.add_argument('--output', '-o', default='output',
+                            help='Output directory (default: output)')
+    scan_parser.add_argument('--export', '-e', action='store_true',
+                            help='Export reports to files')
+    scan_parser.add_argument('--verbose', '-v', action='store_true',
+                            help='Verbose output')
+
+    # Batch scan command
+    batch_parser = subparsers.add_parser('batch', help='Scan multiple targets')
+    batch_parser.add_argument('-t', '--targets-file',
+                             help='File with target URLs (one per line)')
+    batch_parser.add_argument('-u', '--urls', nargs='+',
+                             help='Target URLs to scan')
+    batch_parser.add_argument('--aggressive', '-a', action='store_true',
+                             help='Enable aggressive scanning')
+    batch_parser.add_argument('--timeout', type=int, default=15,
+                             help='Request timeout (default: 15)')
+    batch_parser.add_argument('--threads', type=int, default=2,
+                             help='Concurrent scans (default: 2)')
+    batch_parser.add_argument('--output', '-o', default='output',
+                             help='Output directory (default: output)')
+
+    args = parser.parse_args()
+
+    if not args.command:
+        print_banner()
+        parser.print_help()
+        sys.exit(0)
+
+    print_banner()
+    print_disclaimer()
+
+    confirm = input("Do you have authorization to scan? (yes/no): ")
+    if confirm.lower() != 'yes':
+        print("\nExiting. Obtain authorization first.")
+        sys.exit(0)
+
+    print()
+
+    if args.command == 'scan':
+        scan_single(args)
+    elif args.command == 'batch':
+        scan_batch(args)
+
+
+if __name__ == '__main__':
+    main()

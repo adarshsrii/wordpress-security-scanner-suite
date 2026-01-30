@@ -1,0 +1,5 @@
+# WordPress Security Scanner - Sites List
+# Add one URL per line
+# Lines starting with # are comments
+
+
